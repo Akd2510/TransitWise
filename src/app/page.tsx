@@ -12,6 +12,7 @@ import {Weather, getWeather} from "@/services/weather";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
 import {Cloud, CloudRain, CloudSnow, Sun} from "lucide-react";
 import {Separator} from "@/components/ui/separator";
+import {getCurrentLocation} from "@/services/location"; // Import location service
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -27,9 +28,12 @@ const defaultLocation = {
 
 const weatherIconMap: { [key: string]: React.ComponentType<{ className?: string }> } = {
   "Sunny": Sun,
+  "Clear": Sun,
   "Cloudy": Cloud,
   "Rainy": CloudRain,
+  "Drizzle": CloudRain,
   "Snowy": CloudSnow,
+  "Snow": CloudSnow,
 };
 
 export default function Home() {
@@ -38,26 +42,52 @@ export default function Home() {
   const [recommendedOption, setRecommendedOption] = useState<string>('');
   const {toast} = useToast();
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | null>(null);
 
   const [mapCenter, setMapCenter] = useState(defaultLocation);
 
   useEffect(() => {
-    const fetchWeather = async () => {
+    const fetchCurrentLocation = async () => {
       try {
-        const currentWeather = await getWeather({lat: 19.0760, lng: 72.8777});
-        setWeather(currentWeather);
+        const location = await getCurrentLocation();
+        setCurrentLocation(location);
+        setMapCenter(location); // Set map center to current location
       } catch (error) {
-        console.error("Failed to fetch weather:", error);
+        console.error("Error getting current location:", error);
         toast({
-          title: "Error",
-          description: "Failed to load weather information.",
+          title: "Location Error",
+          description: "Failed to get current location. Using default.",
           variant: "destructive",
         });
+        setCurrentLocation(defaultLocation); // Use default location
+        setMapCenter(defaultLocation);
       }
     };
 
-    fetchWeather();
-  }, []);
+    fetchCurrentLocation();
+  }, [toast]);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      if (currentLocation) {
+        try {
+          const currentWeather = await getWeather(currentLocation);
+          setWeather(currentWeather);
+        } catch (error) {
+          console.error("Failed to fetch weather:", error);
+          toast({
+            title: "Weather Error",
+            description: "Failed to load weather information.",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    if (currentLocation) {
+      fetchWeather();
+    }
+  }, [currentLocation, toast]);
 
   useEffect(() => {
     if (transportOptions.length > 0) {
@@ -70,6 +100,14 @@ export default function Home() {
       toast({
         title: 'Error',
         description: 'Please enter a destination.'
+      });
+      return;
+    }
+
+    if (!currentLocation) {
+      toast({
+        title: 'Error',
+        description: 'Current location not available.'
       });
       return;
     }
@@ -132,7 +170,7 @@ export default function Home() {
         {weather && (
           <Card className="mb-4">
             <CardHeader>
-              <CardTitle>Current Weather in Mumbai</CardTitle>
+              <CardTitle>Current Weather</CardTitle>
             </CardHeader>
             <CardContent>
               <Alert>
@@ -179,6 +217,11 @@ export default function Home() {
                   </CardHeader>
                   <CardContent>
                     <p>{recommendedOption}</p>
+                    {weather && (
+                      <p className="text-sm text-muted-foreground">
+                        Recommended transport considering {weather.conditions.toLowerCase()} conditions.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -203,6 +246,12 @@ export default function Home() {
                           label={option.type}
                         />
                       ))}
+                      {currentLocation && (
+                        <Marker
+                          position={currentLocation}
+                          label="You are here"
+                        />
+                      )}
                     </GoogleMap>
                   </LoadScript>
                 </CardContent>
