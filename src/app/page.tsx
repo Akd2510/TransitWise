@@ -45,12 +45,19 @@ export default function Home() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [mapCenter, setMapCenter] = useState(defaultLocation);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [origin, setOrigin] = useState<string | null>(null);
+  const [loadMap, setLoadMap] = useState(false);
 
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    // Load Google Maps only after API key is available
+    if (googleMapsApiKey) {
+      setLoadMap(true);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -59,11 +66,11 @@ export default function Home() {
         setCurrentLocation(location);
         setMapCenter(location); // Set map center to current location
         setOrigin(`${location.lat}, ${location.lng}`);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error getting current location:", error);
         toast({
           title: "Location Error",
-          description: "Failed to get current location. Using default.",
+          description: error.message || "Failed to get current location. Using default.",
           variant: "destructive",
         });
         setCurrentLocation(defaultLocation); // Use default location
@@ -81,11 +88,11 @@ export default function Home() {
         try {
           const currentWeather = await getWeather(currentLocation);
           setWeather(currentWeather);
-        } catch (error) {
+        } catch (error: any) {
           console.error("Failed to fetch weather:", error);
           toast({
             title: "Weather Error",
-            description: "Failed to load weather information.",
+            description: error.message || "Failed to load weather information.",
             variant: "destructive",
           });
         }
@@ -142,9 +149,18 @@ export default function Home() {
         origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
         destination: destination,
         travelMode: google.maps.TravelMode.TRANSIT,
+      }, (response, status) => {
+        if (status === google.maps.DirectionsStatus.OK) {
+          setDirections(response);
+        } else {
+          console.error("Directions error:", status);
+          toast({
+            title: "Directions Error",
+            description: `Failed to fetch directions: ${status}`,
+            variant: "destructive",
+          });
+        }
       });
-
-      setDirections(results);
 
       toast({
         title: 'Success',
@@ -152,11 +168,12 @@ export default function Home() {
       });
 
     } catch (error: any) {
+      console.error("Transport options error:", error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to load transport options.',
+        variant: "destructive",
       });
-      console.error(error);
     }
   };
 
@@ -173,7 +190,6 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
                 <Autocomplete
                   onLoad={autocomplete => autocompleteRef.current = autocomplete}
                   onPlaceChanged={() => {
@@ -193,7 +209,6 @@ export default function Home() {
                     className="bg-input text-foreground"
                   />
                 </Autocomplete>
-              </LoadScript>
               <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
                 Search
               </Button>
@@ -272,38 +287,42 @@ export default function Home() {
                   <CardTitle>Route Visualization</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  
-                    <GoogleMap
-                      mapContainerStyle={containerStyle}
-                      center={mapCenter}
-                      zoom={13}
-                      onLoad={map => mapRef.current = map}
-                    >
-                      {currentLocation && (
-                        <Marker
-                          position={currentLocation}
-                          label="You are here"
-                        />
-                      )}
-                      {transportOptions.map((option) => (
-                        <Marker
-                          key={option.id}
-                          position={option.location}
-                          label={option.type}
-                        />
-                      ))}
-                      {directions && (
-                        <DirectionsRenderer
-                          directions={directions}
-                          options={{
-                            polylineOptions: {
-                              strokeColor: "#ff2527"
-                            }
-                          }}
-                        />
-                      )}
-                    </GoogleMap>
-                  
+                  {loadMap ? (
+                    <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
+                      <GoogleMap
+                        mapContainerStyle={containerStyle}
+                        center={mapCenter}
+                        zoom={13}
+                        onLoad={map => mapRef.current = map}
+                      >
+                        {currentLocation && (
+                          <Marker
+                            position={currentLocation}
+                            label="You are here"
+                          />
+                        )}
+                        {transportOptions.map((option) => (
+                          <Marker
+                            key={option.id}
+                            position={option.location}
+                            label={option.type}
+                          />
+                        ))}
+                        {directions && (
+                          <DirectionsRenderer
+                            directions={directions}
+                            options={{
+                              polylineOptions: {
+                                strokeColor: "#ff2527"
+                              }
+                            }}
+                          />
+                        )}
+                      </GoogleMap>
+                    </LoadScript>
+                  ) : (
+                    <div>Loading Map...</div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -313,4 +332,3 @@ export default function Home() {
     </div>
   );
 }
-
