@@ -1,15 +1,7 @@
-export interface VehicleLocation {
-  /**
-   * The latitude of the vehicle's location.
-   */
-  lat: number;
-  /**
-   * The longitude of the vehicle's location.
-   */
-  lng: number;
-}
+import {VehicleLocation} from "@/services/transport";
+
 export const getCurrentLocation = (): Promise<VehicleLocation> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -18,27 +10,20 @@ export const getCurrentLocation = (): Promise<VehicleLocation> => {
             lng: position.coords.longitude,
           });
         },
-        (error: GeolocationPositionError) => {
-          let message = "Geolocation error: ";
-          switch (error.code) {
-            case 1:
-              message += "Permission denied";
-              break;
-            case 2:
-              message += "Position unavailable";
-              break;
-            case 3:
-              message += "Timeout";
-              break;
-            default:
-              message += "Unknown error";
-          }
-          reject(new Error(message));
-        },
+        () => {
+          // Use a default location if permission is denied or other errors occur
+          resolve({
+            lat: 19.0760,
+            lng: 72.8777,
+          });
+        }
       );
     } else {
-      reject(new Error("Geolocation is not supported by this browser."));
+      // Use a default location if geolocation is not supported
+      resolve({
+        lat: 19.0760,
+        lng: 72.8777,
+      });
     }
   });
 };
-
