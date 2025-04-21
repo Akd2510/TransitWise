@@ -144,6 +144,8 @@ export default function Home() {
 
   const WeatherIcon = weather && weatherIconMap[weather.conditions] ? weatherIconMap[weather.conditions] : Sun;
 
+  const temperatureCelsius = weather ? Math.round((weather.temperatureFarenheit - 32) * 5 / 9) : null;
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <div className="container mx-auto p-4">
@@ -177,7 +179,7 @@ export default function Home() {
                 <WeatherIcon className="h-6 w-6"/>
                 <AlertTitle>{weather.conditions}</AlertTitle>
                 <AlertDescription>
-                  {weather.temperatureFarenheit}°F
+                  {temperatureCelsius}°C
                 </AlertDescription>
               </Alert>
             </CardContent>
