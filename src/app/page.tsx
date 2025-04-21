@@ -1,11 +1,11 @@
 "use client";
 
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useRef} from 'react';
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
 import {getTransportOptions, TransportOption} from "@/services/transport";
-import {GoogleMap, LoadScript, Marker} from "@react-google-maps/api";
+import {GoogleMap, LoadScript, Marker, DirectionsRenderer, Autocomplete} from "@react-google-maps/api";
 import {useToast} from "@/hooks/use-toast";
 import {recommendTransport, RecommendTransportInput} from "@/ai/flows/recommend-transport";
 import {Weather, getWeather} from "@/services/weather";
@@ -43,8 +43,14 @@ export default function Home() {
   const {toast} = useToast();
   const [weather, setWeather] = useState<Weather | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | null>(null);
-
   const [mapCenter, setMapCenter] = useState(defaultLocation);
+  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  const [origin, setOrigin] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -52,6 +58,7 @@ export default function Home() {
         const location = await getCurrentLocation();
         setCurrentLocation(location);
         setMapCenter(location); // Set map center to current location
+        setOrigin(`${location.lat}, ${location.lng}`);
       } catch (error) {
         console.error("Error getting current location:", error);
         toast({
@@ -61,6 +68,7 @@ export default function Home() {
         });
         setCurrentLocation(defaultLocation); // Use default location
         setMapCenter(defaultLocation);
+        setOrigin(`${defaultLocation.lat}, ${defaultLocation.lng}`);
       }
     };
 
@@ -128,6 +136,16 @@ export default function Home() {
       const recommendationResult = await recommendTransport(aiInput);
       setRecommendedOption(recommendationResult.recommendation);
 
+      // Calculate directions
+      const directionsService = new google.maps.DirectionsService();
+      const results = await directionsService.route({
+        origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
+        destination: destination,
+        travelMode: google.maps.TravelMode.TRANSIT,
+      });
+
+      setDirections(results);
+
       toast({
         title: 'Success',
         description: 'Transport options loaded and AI recommendation generated.',
@@ -155,13 +173,27 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              <Input
-                type="text"
-                placeholder="Enter your destination"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                className="bg-input text-foreground"
-              />
+              <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
+                <Autocomplete
+                  onLoad={autocomplete => autocompleteRef.current = autocomplete}
+                  onPlaceChanged={() => {
+                    if (autocompleteRef.current) {
+                      const place = autocompleteRef.current.getPlace();
+                      if (place && place.formatted_address) {
+                        setDestination(place.formatted_address);
+                      }
+                    }
+                  }}
+                >
+                  <Input
+                    type="text"
+                    placeholder="Enter your destination"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                    className="bg-input text-foreground"
+                  />
+                </Autocomplete>
+              </LoadScript>
               <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
                 Search
               </Button>
@@ -180,6 +212,11 @@ export default function Home() {
                 <AlertTitle>{weather.conditions}</AlertTitle>
                 <AlertDescription>
                   {temperatureCelsius}°C
+                  {recommendedOption && (
+                    <p className="text-sm text-muted-foreground">
+                      Recommended transport: {recommendedOption}
+                    </p>
+                  )}
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -240,7 +277,14 @@ export default function Home() {
                       mapContainerStyle={containerStyle}
                       center={mapCenter}
                       zoom={13}
+                      onLoad={map => mapRef.current = map}
                     >
+                      {currentLocation && (
+                        <Marker
+                          position={currentLocation}
+                          label="You are here"
+                        />
+                      )}
                       {transportOptions.map((option) => (
                         <Marker
                           key={option.id}
@@ -248,10 +292,14 @@ export default function Home() {
                           label={option.type}
                         />
                       ))}
-                      {currentLocation && (
-                        <Marker
-                          position={currentLocation}
-                          label="You are here"
+                      {directions && (
+                        <DirectionsRenderer
+                          directions={directions}
+                          options={{
+                            polylineOptions: {
+                              strokeColor: "#ff2527"
+                            }
+                          }}
                         />
                       )}
                     </GoogleMap>
