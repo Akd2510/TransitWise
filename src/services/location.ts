@@ -10,7 +10,7 @@ export interface VehicleLocation {
 }
 export const getCurrentLocation = (): Promise<VehicleLocation> => {
   return new Promise((resolve, reject) => {
-    if (navigator.geolocation) {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           resolve({
@@ -41,3 +41,4 @@ export const getCurrentLocation = (): Promise<VehicleLocation> => {
     }
   });
 };
+
