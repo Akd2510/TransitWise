@@ -11,6 +11,7 @@ import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import {Weather, getWeather} from '@/services/weather';
 import {TransportOption, getTransportOptions} from '@/services/transport';
+import {getCurrentLocation} from '@/services/location';
 
 const RecommendTransportInputSchema = z.object({
   destination: z.string().describe('The destination of the journey.'),
@@ -84,7 +85,7 @@ const recommendTransportFlow = ai.defineFlow<
   },
   async input => {
     const transportOptions = await getTransportOptions(input.destination);
-    const weather: Weather = await getWeather({lat: 19.0760, lng: 72.8777}); // Hardcoded Mumbai location
+    const weather: Weather = await getWeather(await getCurrentLocation());
 
     const {output} = await recommendTransportPrompt({
       destination: input.destination,

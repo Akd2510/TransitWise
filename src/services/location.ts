@@ -18,9 +18,23 @@ export const getCurrentLocation = (): Promise<VehicleLocation> => {
             lng: position.coords.longitude,
           });
         },
-        (error) => {
-          reject(error);
-        }
+        (error: GeolocationPositionError) => {
+          let message = "Geolocation error: ";
+          switch (error.code) {
+            case 1:
+              message += "Permission denied";
+              break;
+            case 2:
+              message += "Position unavailable";
+              break;
+            case 3:
+              message += "Timeout";
+              break;
+            default:
+              message += "Unknown error";
+          }
+          reject(new Error(message));
+        },
       );
     } else {
       reject(new Error("Geolocation is not supported by this browser."));

@@ -55,29 +55,26 @@ export interface TransportOption {
  * @returns A promise that resolves to an array of TransportOption objects.
  */
 export async function getTransportOptions(destination: string): Promise<TransportOption[]> {
-  // TODO: Implement this by calling an API.
+  const numOptions = Math.floor(Math.random() * 3) + 2; // 2 to 4 options
+  const options: TransportOption[] = [];
 
-  return [
-    {
-      id: 'bus123',
-      type: 'bus',
-      location: { lat: 19.0760, lng: 72.8777 },
-      eta: 30,
-      fare: { amount: 50 },
-    },
-    {
-      id: 'train456',
-      type: 'train',
-      location: { lat: 19.0760, lng: 72.8777 },
-      eta: 20,
-      fare: { amount: 40 },
-    },
-    {
-      id: 'auto789',
-      type: 'auto',
-      location: { lat: 19.0760, lng: 72.8777 },
-      eta: 40,
-      fare: { amount: 60 },
-    },
-  ];
+  for (let i = 0; i < numOptions; i++) {
+    const type = ['bus', 'train', 'auto'][Math.floor(Math.random() * 3)];
+    const location: VehicleLocation = {
+      lat: 19.0760 + (Math.random() - 0.5) * 0.1, // within ~11 km
+      lng: 72.8777 + (Math.random() - 0.5) * 0.1,
+    };
+    const eta = Math.floor(Math.random() * 60) + 10; // 10 to 70 minutes
+    const fare: Fare = { amount: Math.floor(Math.random() * 100) + 20 }; // 20 to 120 rupees
+
+    options.push({
+      id: `${type}${Math.random().toString(36).substring(2, 9)}`, // random id
+      type,
+      location,
+      eta,
+      fare,
+    });
+  }
+
+  return options;
 }

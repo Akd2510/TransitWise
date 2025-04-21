@@ -61,6 +61,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    console.log("Initializing Autocomplete...");
     if (loadMap) {
       // Check if google is defined before setting autocompleteLoaded
       if (typeof google !== 'undefined' && google.maps && google.maps.places) {
@@ -106,12 +107,20 @@ export default function Home() {
         setMapCenter(location); // Set map center to current location
         setOrigin(`${location.lat}, ${location.lng}`);
       } catch (error: any) {
-        console.error("Error getting current location:", error);
-        toast({
-          title: "Location Error",
-          description: error.message || "Failed to get current location. Using default.",
-          variant: "destructive",
-        });
+        console.error("Error getting current location:", error.message);
+        if (error.message && error.message.toLowerCase().includes("permission denied")) {
+          toast({
+            title: "Location Error",
+            description: "We need your location to provide accurate transport options. Please enable location access in your browser settings.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Location Error",
+            description: error.message || "Failed to get current location. Using default.",
+            variant: "destructive",
+          });
+        }
         setCurrentLocation(defaultLocation); // Use default location
         setMapCenter(defaultLocation);
         setOrigin(`${defaultLocation.lat}, ${defaultLocation.lng}`);
@@ -229,48 +238,39 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              {loadMap ? (
-                <Suspense fallback={<div>Loading Autocomplete...</div>}>
-                  <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
-                    {autocompleteLoaded ? (
-                      <Autocomplete
-                        onLoad={autocomplete => autocompleteRef.current = autocomplete}
-                        onPlaceChanged={() => {
-                          if (autocompleteRef.current) {
-                            const place = autocompleteRef.current.getPlace();
-                            if (place && place.formatted_address) {
-                              setDestination(place.formatted_address);
-                            }
+              <Suspense fallback={<div>Loading Autocomplete...</div>}>
+                <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
+                  {autocompleteLoaded ? (
+                    <Autocomplete
+                      onLoad={autocomplete => autocompleteRef.current = autocomplete}
+                      onPlaceChanged={() => {
+                        if (autocompleteRef.current) {
+                          const place = autocompleteRef.current.getPlace();
+                          if (place && place.formatted_address) {
+                            setDestination(place.formatted_address);
                           }
-                        }}
-                      >
-                        <Input
-                          type="text"
-                          id="destination-input" // Ensure the ID is set
-                          placeholder="Enter your destination"
-                          value={destination}
-                          onChange={(e) => setDestination(e.target.value)}
-                          className="bg-input text-foreground"
-                        />
-                      </Autocomplete>
-                    ) : (
+                        }
+                      }}
+                    >
                       <Input
                         type="text"
-                        placeholder="Loading Autocomplete..."
-                        disabled
+                        id="destination-input" // Ensure the ID is set
+                        placeholder="Enter your destination"
+                        value={destination}
+                        onChange={(e) => setDestination(e.target.value)}
                         className="bg-input text-foreground"
                       />
-                    )}
-                  </LoadScript>
-                </Suspense>
-              ) : (
-                <Input
-                  type="text"
-                  placeholder="Loading Map..."
-                  disabled
-                  className="bg-input text-foreground"
-                />
-              )}
+                    </Autocomplete>
+                  ) : (
+                    <Input
+                      type="text"
+                      placeholder="Loading Autocomplete..."
+                      disabled
+                      className="bg-input text-foreground"
+                    />
+                  )}
+                </LoadScript>
+              </Suspense>
               <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
                 Search
               </Button>
@@ -349,42 +349,38 @@ export default function Home() {
                   <CardTitle>Route Visualization</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {loadMap ? (
-                    <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
-                      <GoogleMap
-                        mapContainerStyle={containerStyle}
-                        center={mapCenter}
-                        zoom={13}
-                        onLoad={map => mapRef.current = map}
-                      >
-                        {currentLocation && (
-                          <Marker
-                            position={currentLocation}
-                            label="You are here"
-                          />
-                        )}
-                        {transportOptions.map((option) => (
-                          <Marker
-                            key={option.id}
-                            position={option.location}
-                            label={option.type}
-                          />
-                        ))}
-                        {directions && (
-                          <DirectionsRenderer
-                            directions={directions}
-                            options={{
-                              polylineOptions: {
-                                strokeColor: "#ff2527"
-                              }
-                            }}
-                          />
-                        )}
-                      </GoogleMap>
-                    </LoadScript>
-                  ) : (
-                    <div>Loading Map...</div>
-                  )}
+                  <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
+                    <GoogleMap
+                      mapContainerStyle={containerStyle}
+                      center={mapCenter}
+                      zoom={13}
+                      onLoad={map => mapRef.current = map}
+                    >
+                      {currentLocation && (
+                        <Marker
+                          position={currentLocation}
+                          label="You are here"
+                        />
+                      )}
+                      {transportOptions.map((option) => (
+                        <Marker
+                          key={option.id}
+                          position={option.location}
+                          label={option.type}
+                        />
+                      ))}
+                      {directions && (
+                        <DirectionsRenderer
+                          directions={directions}
+                          options={{
+                            polylineOptions: {
+                              strokeColor: "#ff2527"
+                            }
+                          }}
+                        />
+                      )}
+                    </GoogleMap>
+                  </LoadScript>
                 </CardContent>
               </Card>
             </div>
