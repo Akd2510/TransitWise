@@ -65,13 +65,7 @@ const recommendTransportPrompt = ai.definePrompt({
       recommendation: z.string().describe('The recommended transport option and reasoning.'),
     }),
   },
-  prompt: `Given the following transport options to {{{destination}}}:\n\n{{#each transportOptions}}\n- Type: {{this.type}}, ETA: {{this.eta}} minutes, Fare: ₹{{this.fare.amount}}\n{{/each}}\n\nAnd the current weather conditions: {{{weather.conditions}}} with temperature {{{weather.temperatureFarenheit}}}°F.\n\n{% raw %}{{ #if userPreferences }}{% endraw %}
-Considering the user preferences:
-{% raw %}{{ #if userPreferences.maxFare }}{% endraw %}Maximum fare: ₹{{{userPreferences.maxFare}}}{% raw }}{{ /if }}{% endraw %}
-{% raw %}{{ #if userPreferences.maxEta }}{% endraw %}Maximum ETA: {{{userPreferences.maxEta}}} minutes{% raw }}{{ /if }}{% endraw %}
-{% raw %}{{ #if userPreferences.weatherConsiderations }}{% endraw %}Weather considerations: Yes{% raw }}{{ /if }}{% endraw %}
-{% raw %}{{ /if }}{% endraw %}
-\nRecommend the best transport option, explaining your reasoning based on ETA, fare, weather conditions, and user preferences, if available.`,
+  prompt: `Given the following transport options to {{{destination}}}:\n\n{{#each transportOptions}}\n- Type: {{this.type}}, ETA: {{this.eta}} minutes, Fare: ₹{{this.fare.amount}}\n{{/each}}\n\nAnd the current weather conditions: {{{weather.conditions}}} with temperature {{{weather.temperatureFarenheit}}}°F.\n\n{{#if userPreferences}}Considering the user preferences:\n{{#if userPreferences.maxFare}}Maximum fare: ₹{{{userPreferences.maxFare}}}{{/if}}\n{{#if userPreferences.maxEta}}Maximum ETA: {{{userPreferences.maxEta}}} minutes{{/if}}\n{{#if userPreferences.weatherConsiderations}}Weather considerations: Yes{{/if}}{{/if}}\n\nRecommend the best transport option, explaining your reasoning based on ETA, fare, weather conditions, and user preferences, if available.`,
 });
 
 const recommendTransportFlow = ai.defineFlow<
