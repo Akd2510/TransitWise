@@ -1,18 +1,18 @@
 "use client";
 
-import {useEffect, useState, useRef, Suspense} from 'react';
+import {useEffect, useState, useRef, useCallback} from 'react';
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
 import {getTransportOptions, TransportOption} from "@/services/transport";
-import {GoogleMap, LoadScript, Marker, DirectionsRenderer} from "@react-google-maps/api";
+import {GoogleMap, LoadScript, Marker, DirectionsRenderer, Autocomplete} from "@react-google-maps/api";
 import {useToast} from "@/hooks/use-toast";
 import {recommendTransport, RecommendTransportInput} from "@/ai/flows/recommend-transport";
 import {Weather, getWeather} from "@/services/weather";
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
 import {Cloud, CloudRain, CloudSnow, Sun} from "lucide-react";
+import {getCurrentLocation} from "@/services/location";
 import {Separator} from "@/components/ui/separator";
-import {getCurrentLocation} from "@/services/location"; // Import location service
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -47,7 +47,8 @@ export default function Home() {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [origin, setOrigin] = useState<string | null>(null);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-
+    const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+    const destinationInputRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export default function Home() {
       try {
         const location = await getCurrentLocation();
         setCurrentLocation(location);
-        setMapCenter(location); // Set map center to current location
+        setMapCenter(location);
         setOrigin(`${location.lat}, ${location.lng}`);
       } catch (error: any) {
         console.error("Error getting current location:", error.message);
@@ -72,7 +73,7 @@ export default function Home() {
             variant: "destructive",
           });
         }
-        setCurrentLocation(defaultLocation); // Use default location
+        setCurrentLocation(defaultLocation);
         setMapCenter(defaultLocation);
         setOrigin(`${defaultLocation.lat}, ${defaultLocation.lng}`);
       }
@@ -109,46 +110,28 @@ export default function Home() {
     }
   }, [transportOptions]);
 
-    useEffect(() => {
-        let autocompleteInstance: google.maps.places.Autocomplete;
-
-        if (googleMapsApiKey) {
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`;
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
-
-            script.onload = () => {
-                autocompleteInstance = new google.maps.places.Autocomplete(
-                    document.getElementById('destination-input') as HTMLInputElement,
-                    {
-                        types: ['geocode'],
-                    }
-                );
-
-                autocompleteInstance.addListener('place_changed', () => {
-                    const place = autocompleteInstance.getPlace();
-                    if (place?.formatted_address) {
-                        setDestination(place.formatted_address);
-                        // Update the map center when a place is selected
-                        setMapCenter({
-                            lat: place.geometry?.location?.lat() || defaultLocation.lat,
-                            lng: place.geometry?.location?.lng() || defaultLocation.lng,
-                        });
-                    }
-                });
-                setAutocomplete(autocompleteInstance);
-            };
-
-            return () => {
-                document.head.removeChild(script);
-                if (autocompleteInstance) {
-                    google.maps.event.clearInstanceListeners(autocompleteInstance);
-                }
-            };
-        }
+    const onLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
+        autocompleteRef.current = autocomplete;
     }, []);
+
+    const onPlaceChanged = useCallback(() => {
+        if (autocompleteRef.current) {
+            const place = autocompleteRef.current.getPlace();
+            if (place?.geometry?.location) {
+                setDestination(place.formatted_address || '');
+                setMapCenter({
+                    lat: place.geometry.location.lat(),
+                    lng: place.geometry.location.lng()
+                });
+            } else {
+                toast({
+                    title: "Could not find destination",
+                    description: "Please enter a valid destination",
+                    variant: "destructive"
+                });
+            }
+        }
+    }, [toast]);
 
   const handleSearch = async () => {
     if (!destination) {
@@ -183,24 +166,26 @@ export default function Home() {
       const recommendationResult = await recommendTransport(aiInput);
       setRecommendedOption(recommendationResult.recommendation);
 
-      // Calculate directions
       const directionsService = new google.maps.DirectionsService();
-      directionsService.route({
-        origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
-        destination: destination,
-        travelMode: google.maps.TravelMode.TRANSIT,
-      }, (response, status) => {
-        if (status === google.maps.DirectionsStatus.OK) {
-          setDirections(response);
-        } else {
-          console.error("Directions error:", status);
-          toast({
-            title: "Directions Error",
-            description: `Failed to fetch directions: ${status}`,
-            variant: "destructive",
-          });
-        }
-      });
+            directionsService.route(
+                {
+                    origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
+                    destination: destination,
+                    travelMode: google.maps.TravelMode.TRANSIT,
+                },
+                (response, status) => {
+                    if (status === google.maps.DirectionsStatus.OK) {
+                        setDirections(response);
+                    } else {
+                        console.error(`Directions error: ${status}`);
+                        toast({
+                            title: "Directions Error",
+                            description: `Failed to fetch directions: ${status}`,
+                            variant: "destructive",
+                        });
+                    }
+                }
+            );
 
       toast({
         title: 'Success',
@@ -230,14 +215,18 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              <Input
-                type="text"
-                id="destination-input"
-                placeholder="Enter your destination"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                className="bg-input text-foreground"
-              />
+              <Autocomplete
+                onLoad={onLoad}
+                onPlaceChanged={onPlaceChanged}
+              >
+                  <Input
+                    type="text"
+                    placeholder="Enter your destination"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                    className="bg-input text-foreground"
+                  />
+              </Autocomplete>
               <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
                 Search
               </Button>
@@ -316,7 +305,10 @@ export default function Home() {
                   <CardTitle>Route Visualization</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
+                  <LoadScript
+                      googleMapsApiKey={googleMapsApiKey}
+                      libraries={["places"]}
+                  >
                     <GoogleMap
                       mapContainerStyle={containerStyle}
                       center={mapCenter}
