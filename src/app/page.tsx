@@ -272,7 +272,7 @@ export default function Home() {
                   <CardTitle>Route Visualization</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <LoadScript googleMapsApiKey={googleMapsApiKey}>
+                  
                     <GoogleMap
                       mapContainerStyle={containerStyle}
                       center={mapCenter}
@@ -303,7 +303,7 @@ export default function Home() {
                         />
                       )}
                     </GoogleMap>
-                  </LoadScript>
+                  
                 </CardContent>
               </Card>
             </div>
@@ -313,3 +313,4 @@ export default function Home() {
     </div>
   );
 }
+
