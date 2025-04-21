@@ -47,6 +47,7 @@ export default function Home() {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [origin, setOrigin] = useState<string | null>(null);
   const [loadMap, setLoadMap] = useState(false);
+  const [autocompleteLoaded, setAutocompleteLoaded] = useState(false); // New state
 
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
@@ -58,6 +59,18 @@ export default function Home() {
       setLoadMap(true);
     }
   }, []);
+
+useEffect(() => {
+    if (loadMap) {
+      // Check if google is defined before setting autocompleteLoaded
+      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
+        setAutocompleteLoaded(true);
+      } else {
+        // If google is not defined, set autocompleteLoaded to false
+        setAutocompleteLoaded(false);
+      }
+    }
+  }, [loadMap]);
 
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -190,6 +203,7 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+              {loadMap && autocompleteLoaded ? (
                 <Autocomplete
                   onLoad={autocomplete => autocompleteRef.current = autocomplete}
                   onPlaceChanged={() => {
@@ -209,6 +223,14 @@ export default function Home() {
                     className="bg-input text-foreground"
                   />
                 </Autocomplete>
+              ) : (
+                <Input
+                  type="text"
+                  placeholder="Loading Autocomplete..."
+                  disabled
+                  className="bg-input text-foreground"
+                />
+              )}
               <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
                 Search
               </Button>
