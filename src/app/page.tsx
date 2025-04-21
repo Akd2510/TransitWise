@@ -38,6 +38,7 @@ const weatherIconMap: { [key: string]: React.ComponentType<{ className?: string 
 
 export default function Home() {
   const [destination, setDestination] = useState('');
+  const [startLocation, setStartLocation] = useState('');
   const [transportOptions, setTransportOptions] = useState<TransportOption[]>([]);
   const [recommendedOption, setRecommendedOption] = useState<string>('');
   const {toast} = useToast();
@@ -45,24 +46,25 @@ export default function Home() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [mapCenter, setMapCenter] = useState(defaultLocation);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [origin, setOrigin] = useState<string | null>(null);
-  const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteDestinationRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteStartLocationRef = useRef<google.maps.places.Autocomplete | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
 
   useEffect(() => {
     if (!googleMapsApiKey) {
       setApiError("Google Maps API key is missing. Please provide a valid API key to display the map.");
       return;
     }
+    setIsGoogleMapsLoaded(true);
 
     const fetchCurrentLocation = async () => {
       try {
         const location = await getCurrentLocation();
         setCurrentLocation(location);
+        setStartLocation(`${location.lat}, ${location.lng}`);
         setMapCenter(location);
-        setOrigin(`${location.lat}, ${location.lng}`);
       } catch (error: any) {
         console.error("Error getting current location:", error.message);
         if (error.message && error.message.toLowerCase().includes("permission denied")) {
@@ -80,7 +82,7 @@ export default function Home() {
         }
         setCurrentLocation(defaultLocation);
         setMapCenter(defaultLocation);
-        setOrigin(`${defaultLocation.lat}, ${defaultLocation.lng}`);
+        setStartLocation(`${defaultLocation.lat}, ${defaultLocation.lng}`);
       }
     };
 
@@ -115,9 +117,14 @@ export default function Home() {
     }
   }, [transportOptions]);
 
-  const onLoad = useCallback((autocomplete: google.maps.places.Autocomplete) => {
-    autocompleteRef.current = autocomplete;
+  const onLoadDestination = useCallback((autocomplete: google.maps.places.Autocomplete) => {
+    autocompleteDestinationRef.current = autocomplete;
   }, []);
+
+  const onLoadStartLocation = useCallback((autocomplete: google.maps.places.Autocomplete) => {
+    autocompleteStartLocationRef.current = autocomplete;
+  }, []);
+
 
   const handleSearch = useCallback(async () => {
     if (!destination) {
@@ -128,10 +135,10 @@ export default function Home() {
       return;
     }
 
-    if (!currentLocation) {
+    if (!startLocation) {
       toast({
         title: 'Error',
-        description: 'Current location not available.'
+        description: 'Please enter a starting location.'
       });
       return;
     }
@@ -155,7 +162,7 @@ export default function Home() {
       const directionsService = new google.maps.DirectionsService();
       directionsService.route(
         {
-          origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
+          origin: startLocation,
           destination: destination,
           travelMode: google.maps.TravelMode.TRANSIT,
         },
@@ -186,12 +193,12 @@ export default function Home() {
         variant: "destructive",
       });
     }
-  }, [destination, currentLocation, origin, toast]);
+  }, [destination, startLocation, toast]);
 
 
-  const onPlaceChanged = useCallback(() => {
-    if (autocompleteRef.current) {
-      const place = autocompleteRef.current.getPlace();
+  const onPlaceChangedDestination = useCallback(() => {
+    if (autocompleteDestinationRef.current) {
+      const place = autocompleteDestinationRef.current.getPlace();
       if (place?.geometry?.location) {
         setDestination(place.formatted_address || '');
         setMapCenter({
@@ -208,10 +215,20 @@ export default function Home() {
     }
   }, [toast]);
 
-  const onGoogleMapsLoad = () => {
-    setIsGoogleMapsLoaded(true);
-  };
-
+  const onPlaceChangedStartLocation = useCallback(() => {
+    if (autocompleteStartLocationRef.current) {
+      const place = autocompleteStartLocationRef.current.getPlace();
+      if (place?.geometry?.location) {
+        setStartLocation(place.formatted_address || '');
+      } else {
+        toast({
+          title: "Could not find start location",
+          description: "Please enter a valid starting location",
+          variant: "destructive"
+        });
+      }
+    }
+  }, [toast]);
 
   const WeatherIcon = weather && weatherIconMap[weather.conditions] ? weatherIconMap[weather.conditions] : Sun;
 
@@ -238,22 +255,36 @@ export default function Home() {
                   <LoadScript
                     googleMapsApiKey={googleMapsApiKey}
                     libraries={["places"]}
-                    onLoad={onGoogleMapsLoad}
                   >
-                    <Autocomplete
-                      onLoad={onLoad}
-                      onPlaceChanged={onPlaceChanged}
-                    >
-                      <Input
-                        type="text"
-                        placeholder="Enter your destination"
-                        className="bg-input text-foreground"
-                        value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                      />
-                    </Autocomplete>
+                    <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+                      <Autocomplete
+                        onLoad={onLoadStartLocation}
+                        onPlaceChanged={onPlaceChangedStartLocation}
+                      >
+                        <Input
+                          type="text"
+                          placeholder="Enter your starting location"
+                          className="bg-input text-foreground"
+                          value={startLocation}
+                          onChange={(e) => setStartLocation(e.target.value)}
+                        />
+                      </Autocomplete>
+
+                      <Autocomplete
+                        onLoad={onLoadDestination}
+                        onPlaceChanged={onPlaceChangedDestination}
+                      >
+                        <Input
+                          type="text"
+                          placeholder="Enter your destination"
+                          className="bg-input text-foreground"
+                          value={destination}
+                          onChange={(e) => setDestination(e.target.value)}
+                        />
+                      </Autocomplete>
+                      <Button onClick={handleSearch}>Search</Button>
+                    </div>
                   </LoadScript>
-                  <Button onClick={handleSearch}>Search</Button>
                 </>
               )}
             </div>
@@ -338,19 +369,6 @@ export default function Home() {
                       zoom={13}
                       onLoad={map => mapRef.current = map}
                     >
-                      {currentLocation && (
-                        <Marker
-                          position={currentLocation}
-                          label="You are here"
-                        />
-                      )}
-                      {transportOptions.map((option) => (
-                        <Marker
-                          key={option.id}
-                          position={option.location}
-                          label={option.type}
-                        />
-                      ))}
                       {directions && (
                         <DirectionsRenderer
                           directions={directions}
