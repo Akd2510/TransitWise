@@ -5,7 +5,7 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
 import {getTransportOptions, TransportOption} from "@/services/transport";
-import {GoogleMap, LoadScript, Marker, DirectionsRenderer, Autocomplete} from "@react-google-maps/api";
+import {GoogleMap, LoadScript, Marker, DirectionsRenderer} from "@react-google-maps/api";
 import {useToast} from "@/hooks/use-toast";
 import {recommendTransport, RecommendTransportInput} from "@/ai/flows/recommend-transport";
 import {Weather, getWeather} from "@/services/weather";
@@ -46,58 +46,9 @@ export default function Home() {
   const [mapCenter, setMapCenter] = useState(defaultLocation);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [origin, setOrigin] = useState<string | null>(null);
-  const [loadMap, setLoadMap] = useState(false);
-  const [autocompleteLoaded, setAutocompleteLoaded] = useState(false); // New state
-
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
 
   const mapRef = useRef<google.maps.Map | null>(null);
-
-  useEffect(() => {
-    // Load Google Maps only after API key is available
-    if (googleMapsApiKey) {
-      setLoadMap(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    console.log("Initializing Autocomplete...");
-    if (loadMap) {
-      // Check if google is defined before setting autocompleteLoaded
-      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-        setAutocompleteLoaded(true);
-      } else {
-        // If google is not defined, set autocompleteLoaded to false
-        setAutocompleteLoaded(false);
-      }
-    }
-  }, [loadMap]);
-
-  useEffect(() => {
-    if (loadMap && autocompleteLoaded) {
-      // Initialize Autocomplete only when google is available
-      const initializeAutocomplete = () => {
-        if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-          autocompleteRef.current = new google.maps.places.Autocomplete(
-            document.getElementById('destination-input') as HTMLInputElement,
-            {
-              types: ['geocode'],
-            }
-          );
-
-          autocompleteRef.current.addListener('place_changed', () => {
-            const place = autocompleteRef.current?.getPlace();
-            if (place?.formatted_address) {
-              setDestination(place.formatted_address);
-            }
-          });
-        }
-      };
-
-      initializeAutocomplete();
-    }
-  }, [loadMap, autocompleteLoaded]);
-
 
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -158,6 +109,47 @@ export default function Home() {
     }
   }, [transportOptions]);
 
+    useEffect(() => {
+        let autocompleteInstance: google.maps.places.Autocomplete;
+
+        if (googleMapsApiKey) {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+
+            script.onload = () => {
+                autocompleteInstance = new google.maps.places.Autocomplete(
+                    document.getElementById('destination-input') as HTMLInputElement,
+                    {
+                        types: ['geocode'],
+                    }
+                );
+
+                autocompleteInstance.addListener('place_changed', () => {
+                    const place = autocompleteInstance.getPlace();
+                    if (place?.formatted_address) {
+                        setDestination(place.formatted_address);
+                        // Update the map center when a place is selected
+                        setMapCenter({
+                            lat: place.geometry?.location?.lat() || defaultLocation.lat,
+                            lng: place.geometry?.location?.lng() || defaultLocation.lng,
+                        });
+                    }
+                });
+                setAutocomplete(autocompleteInstance);
+            };
+
+            return () => {
+                document.head.removeChild(script);
+                if (autocompleteInstance) {
+                    google.maps.event.clearInstanceListeners(autocompleteInstance);
+                }
+            };
+        }
+    }, []);
+
   const handleSearch = async () => {
     if (!destination) {
       toast({
@@ -193,7 +185,7 @@ export default function Home() {
 
       // Calculate directions
       const directionsService = new google.maps.DirectionsService();
-      const results = await directionsService.route({
+      directionsService.route({
         origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
         destination: destination,
         travelMode: google.maps.TravelMode.TRANSIT,
@@ -238,39 +230,14 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              <Suspense fallback={<div>Loading Autocomplete...</div>}>
-                <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
-                  {autocompleteLoaded ? (
-                    <Autocomplete
-                      onLoad={autocomplete => autocompleteRef.current = autocomplete}
-                      onPlaceChanged={() => {
-                        if (autocompleteRef.current) {
-                          const place = autocompleteRef.current.getPlace();
-                          if (place && place.formatted_address) {
-                            setDestination(place.formatted_address);
-                          }
-                        }
-                      }}
-                    >
-                      <Input
-                        type="text"
-                        id="destination-input" // Ensure the ID is set
-                        placeholder="Enter your destination"
-                        value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                        className="bg-input text-foreground"
-                      />
-                    </Autocomplete>
-                  ) : (
-                    <Input
-                      type="text"
-                      placeholder="Loading Autocomplete..."
-                      disabled
-                      className="bg-input text-foreground"
-                    />
-                  )}
-                </LoadScript>
-              </Suspense>
+              <Input
+                type="text"
+                id="destination-input"
+                placeholder="Enter your destination"
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                className="bg-input text-foreground"
+              />
               <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
                 Search
               </Button>
