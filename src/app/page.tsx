@@ -46,13 +46,16 @@ export default function Home() {
   const [mapCenter, setMapCenter] = useState(defaultLocation);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [origin, setOrigin] = useState<string | null>(null);
-  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const destinationInputRef = useRef<HTMLInputElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   useEffect(() => {
+    if (!googleMapsApiKey) {
+      setApiError("Google Maps API key is missing. Please provide a valid API key to display the map.");
+      return;
+    }
+
     const fetchCurrentLocation = async () => {
       try {
         const location = await getCurrentLocation();
@@ -81,7 +84,7 @@ export default function Home() {
     };
 
     fetchCurrentLocation();
-  }, [toast]);
+  }, [toast, googleMapsApiKey]);
 
   useEffect(() => {
     const fetchWeather = async () => {
@@ -194,7 +197,6 @@ export default function Home() {
           lat: place.geometry.location.lat(),
           lng: place.geometry.location.lng()
         });
-        handleSearch();
       } else {
         toast({
           title: "Could not find destination",
@@ -203,7 +205,7 @@ export default function Home() {
         });
       }
     }
-  }, [toast, handleSearch]);
+  }, [toast]);
 
   const onGoogleMapsLoad = () => {
     setIsGoogleMapsLoaded(true);
@@ -223,30 +225,35 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              {googleMapsApiKey ? (
-                <LoadScript
-                  googleMapsApiKey={googleMapsApiKey}
-                  libraries={["places"]}
-                  onLoad={onGoogleMapsLoad}
-                >
-                  <Autocomplete
-                    onLoad={onLoad}
-                    onPlaceChanged={onPlaceChanged}
-                  >
-                    <Input
-                      type="text"
-                      placeholder="Enter your destination"
-                      className="bg-input text-foreground"
-                    />
-                  </Autocomplete>
-                </LoadScript>
-              ) : (
+              {apiError ? (
                 <Alert variant="destructive">
                   <AlertTitle>Google Maps API Key Required</AlertTitle>
                   <AlertDescription>
-                    Please provide a valid Google Maps API key in your environment variables to enable map and autocomplete features.
+                    {apiError}
                   </AlertDescription>
                 </Alert>
+              ) : (
+                <>
+                  <LoadScript
+                    googleMapsApiKey={googleMapsApiKey}
+                    libraries={["places"]}
+                    onLoad={onGoogleMapsLoad}
+                  >
+                    <Autocomplete
+                      onLoad={onLoad}
+                      onPlaceChanged={onPlaceChanged}
+                    >
+                      <Input
+                        type="text"
+                        placeholder="Enter your destination"
+                        className="bg-input text-foreground"
+                        value={destination}
+                        onChange={(e) => setDestination(e.target.value)}
+                      />
+                    </Autocomplete>
+                  </LoadScript>
+                  <Button onClick={handleSearch}>Search</Button>
+                </>
               )}
             </div>
           </CardContent>
@@ -323,47 +330,42 @@ export default function Home() {
                   <CardTitle>Route Visualization</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {googleMapsApiKey ? (
-                    <LoadScript
-                      googleMapsApiKey={googleMapsApiKey}
-                      libraries={["places"]}
+                  {isGoogleMapsLoaded ? (
+                    <GoogleMap
+                      mapContainerStyle={containerStyle}
+                      center={mapCenter}
+                      zoom={13}
+                      onLoad={map => mapRef.current = map}
                     >
-                      <GoogleMap
-                        mapContainerStyle={containerStyle}
-                        center={mapCenter}
-                        zoom={13}
-                        onLoad={map => mapRef.current = map}
-                      >
-                        {currentLocation && (
-                          <Marker
-                            position={currentLocation}
-                            label="You are here"
-                          />
-                        )}
-                        {transportOptions.map((option) => (
-                          <Marker
-                            key={option.id}
-                            position={option.location}
-                            label={option.type}
-                          />
-                        ))}
-                        {directions && (
-                          <DirectionsRenderer
-                            directions={directions}
-                            options={{
-                              polylineOptions: {
-                                strokeColor: "#ff2527"
-                              }
-                            }}
-                          />
-                        )}
-                      </GoogleMap>
-                    </LoadScript>
+                      {currentLocation && (
+                        <Marker
+                          position={currentLocation}
+                          label="You are here"
+                        />
+                      )}
+                      {transportOptions.map((option) => (
+                        <Marker
+                          key={option.id}
+                          position={option.location}
+                          label={option.type}
+                        />
+                      ))}
+                      {directions && (
+                        <DirectionsRenderer
+                          directions={directions}
+                          options={{
+                            polylineOptions: {
+                              strokeColor: "#ff2527"
+                            }
+                          }}
+                        />
+                      )}
+                    </GoogleMap>
                   ) : (
                     <Alert variant="destructive">
                       <AlertTitle>Map Error</AlertTitle>
                       <AlertDescription>
-                        Google Maps API key is missing. Please provide a valid API key to display the map.
+                        Google Maps API key is missing or failed to load. Please provide a valid API key to display the map.
                       </AlertDescription>
                     </Alert>
                   )}
