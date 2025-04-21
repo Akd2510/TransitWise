@@ -49,6 +49,7 @@ export default function Home() {
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
     if (!googleMapsApiKey) {
