@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect, useState, useRef} from 'react';
+import {useEffect, useState, useRef, Suspense} from 'react';
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Input} from "@/components/ui/input";
 import {Button} from "@/components/ui/button";
@@ -60,7 +60,7 @@ export default function Home() {
     }
   }, []);
 
-useEffect(() => {
+  useEffect(() => {
     if (loadMap) {
       // Check if google is defined before setting autocompleteLoaded
       if (typeof google !== 'undefined' && google.maps && google.maps.places) {
@@ -71,6 +71,32 @@ useEffect(() => {
       }
     }
   }, [loadMap]);
+
+  useEffect(() => {
+    if (loadMap && autocompleteLoaded) {
+      // Initialize Autocomplete only when google is available
+      const initializeAutocomplete = () => {
+        if (typeof google !== 'undefined' && google.maps && google.maps.places) {
+          autocompleteRef.current = new google.maps.places.Autocomplete(
+            document.getElementById('destination-input') as HTMLInputElement,
+            {
+              types: ['geocode'],
+            }
+          );
+
+          autocompleteRef.current.addListener('place_changed', () => {
+            const place = autocompleteRef.current?.getPlace();
+            if (place?.formatted_address) {
+              setDestination(place.formatted_address);
+            }
+          });
+        }
+      };
+
+      initializeAutocomplete();
+    }
+  }, [loadMap, autocompleteLoaded]);
+
 
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -203,30 +229,44 @@ useEffect(() => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              {loadMap && autocompleteLoaded ? (
-                <Autocomplete
-                  onLoad={autocomplete => autocompleteRef.current = autocomplete}
-                  onPlaceChanged={() => {
-                    if (autocompleteRef.current) {
-                      const place = autocompleteRef.current.getPlace();
-                      if (place && place.formatted_address) {
-                        setDestination(place.formatted_address);
-                      }
-                    }
-                  }}
-                >
-                  <Input
-                    type="text"
-                    placeholder="Enter your destination"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="bg-input text-foreground"
-                  />
-                </Autocomplete>
+              {loadMap ? (
+                <Suspense fallback={<div>Loading Autocomplete...</div>}>
+                  <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
+                    {autocompleteLoaded ? (
+                      <Autocomplete
+                        onLoad={autocomplete => autocompleteRef.current = autocomplete}
+                        onPlaceChanged={() => {
+                          if (autocompleteRef.current) {
+                            const place = autocompleteRef.current.getPlace();
+                            if (place && place.formatted_address) {
+                              setDestination(place.formatted_address);
+                            }
+                          }
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          id="destination-input" // Ensure the ID is set
+                          placeholder="Enter your destination"
+                          value={destination}
+                          onChange={(e) => setDestination(e.target.value)}
+                          className="bg-input text-foreground"
+                        />
+                      </Autocomplete>
+                    ) : (
+                      <Input
+                        type="text"
+                        placeholder="Loading Autocomplete..."
+                        disabled
+                        className="bg-input text-foreground"
+                      />
+                    )}
+                  </LoadScript>
+                </Suspense>
               ) : (
                 <Input
                   type="text"
-                  placeholder="Loading Autocomplete..."
+                  placeholder="Loading Map..."
                   disabled
                   className="bg-input text-foreground"
                 />
