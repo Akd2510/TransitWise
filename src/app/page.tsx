@@ -50,6 +50,7 @@ export default function Home() {
     const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
     const destinationInputRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+    const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
 
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -114,59 +115,40 @@ export default function Home() {
         autocompleteRef.current = autocomplete;
     }, []);
 
-    const onPlaceChanged = useCallback(() => {
-        if (autocompleteRef.current) {
-            const place = autocompleteRef.current.getPlace();
-            if (place?.geometry?.location) {
-                setDestination(place.formatted_address || '');
-                setMapCenter({
-                    lat: place.geometry.location.lat(),
-                    lng: place.geometry.location.lng()
-                });
-            } else {
-                toast({
-                    title: "Could not find destination",
-                    description: "Please enter a valid destination",
-                    variant: "destructive"
-                });
-            }
+    const handleSearch = useCallback(async () => {
+        if (!destination) {
+            toast({
+                title: 'Error',
+                description: 'Please enter a destination.'
+            });
+            return;
         }
-    }, [toast]);
 
-  const handleSearch = async () => {
-    if (!destination) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a destination.'
-      });
-      return;
-    }
-
-    if (!currentLocation) {
-      toast({
-        title: 'Error',
-        description: 'Current location not available.'
-      });
-      return;
-    }
-
-    try {
-      const options = await getTransportOptions(destination);
-      setTransportOptions(options);
-
-      const aiInput: RecommendTransportInput = {
-        destination: destination,
-        userPreferences: {
-          maxFare: 100,
-          maxEta: 60,
-          weatherConsiderations: true
+        if (!currentLocation) {
+            toast({
+                title: 'Error',
+                description: 'Current location not available.'
+            });
+            return;
         }
-      };
 
-      const recommendationResult = await recommendTransport(aiInput);
-      setRecommendedOption(recommendationResult.recommendation);
+        try {
+            const options = await getTransportOptions(destination);
+            setTransportOptions(options);
 
-      const directionsService = new google.maps.DirectionsService();
+            const aiInput: RecommendTransportInput = {
+                destination: destination,
+                userPreferences: {
+                    maxFare: 100,
+                    maxEta: 60,
+                    weatherConsiderations: true
+                }
+            };
+
+            const recommendationResult = await recommendTransport(aiInput);
+            setRecommendedOption(recommendationResult.recommendation);
+
+            const directionsService = new google.maps.DirectionsService();
             directionsService.route(
                 {
                     origin: origin || `${currentLocation.lat}, ${currentLocation.lng}`,
@@ -187,20 +169,47 @@ export default function Home() {
                 }
             );
 
-      toast({
-        title: 'Success',
-        description: 'Transport options loaded and AI recommendation generated.',
-      });
+            toast({
+                title: 'Success',
+                description: 'Transport options loaded and AI recommendation generated.',
+            });
 
-    } catch (error: any) {
-      console.error("Transport options error:", error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to load transport options.',
-        variant: "destructive",
-      });
-    }
-  };
+        } catch (error: any) {
+            console.error("Transport options error:", error);
+            toast({
+                title: 'Error',
+                description: error.message || 'Failed to load transport options.',
+                variant: "destructive",
+            });
+        }
+    }, [destination, currentLocation, origin, toast]);
+
+
+    const onPlaceChanged = useCallback(() => {
+        if (autocompleteRef.current) {
+            const place = autocompleteRef.current.getPlace();
+            if (place?.geometry?.location) {
+                setDestination(place.formatted_address || '');
+                setMapCenter({
+                    lat: place.geometry.location.lat(),
+                    lng: place.geometry.location.lng()
+                });
+                // After destination is set, trigger the search
+                handleSearch();
+            } else {
+                toast({
+                    title: "Could not find destination",
+                    description: "Please enter a valid destination",
+                    variant: "destructive"
+                });
+            }
+        }
+    }, [toast, handleSearch]);
+
+    const onGoogleMapsLoad = () => {
+        setIsGoogleMapsLoaded(true);
+    };
+
 
   const WeatherIcon = weather && weatherIconMap[weather.conditions] ? weatherIconMap[weather.conditions] : Sun;
 
@@ -215,21 +224,33 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-              <Autocomplete
-                onLoad={onLoad}
-                onPlaceChanged={onPlaceChanged}
-              >
-                  <Input
-                    type="text"
-                    placeholder="Enter your destination"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="bg-input text-foreground"
-                  />
-              </Autocomplete>
-              <Button onClick={handleSearch} className="bg-primary text-primary-foreground">
-                Search
-              </Button>
+              {googleMapsApiKey ? (
+                  <LoadScript
+                      googleMapsApiKey={googleMapsApiKey}
+                      libraries={["places"]}
+                      onLoad={onGoogleMapsLoad}
+                  >
+                      {isGoogleMapsLoaded && (
+                          <Autocomplete
+                              onLoad={onLoad}
+                              onPlaceChanged={onPlaceChanged}
+                          >
+                              <Input
+                                  type="text"
+                                  placeholder="Enter your destination"
+                                  className="bg-input text-foreground"
+                              />
+                          </Autocomplete>
+                      )}
+                  </LoadScript>
+              ) : (
+                  <Alert variant="destructive">
+                      <AlertTitle>Google Maps API Key Required</AlertTitle>
+                      <AlertDescription>
+                          Please provide a valid Google Maps API key in your environment variables to enable map and autocomplete features.
+                      </AlertDescription>
+                  </Alert>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -305,41 +326,50 @@ export default function Home() {
                   <CardTitle>Route Visualization</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <LoadScript
-                      googleMapsApiKey={googleMapsApiKey}
-                      libraries={["places"]}
-                  >
-                    <GoogleMap
-                      mapContainerStyle={containerStyle}
-                      center={mapCenter}
-                      zoom={13}
-                      onLoad={map => mapRef.current = map}
-                    >
-                      {currentLocation && (
-                        <Marker
-                          position={currentLocation}
-                          label="You are here"
-                        />
-                      )}
-                      {transportOptions.map((option) => (
-                        <Marker
-                          key={option.id}
-                          position={option.location}
-                          label={option.type}
-                        />
-                      ))}
-                      {directions && (
-                        <DirectionsRenderer
-                          directions={directions}
-                          options={{
-                            polylineOptions: {
-                              strokeColor: "#ff2527"
-                            }
-                          }}
-                        />
-                      )}
-                    </GoogleMap>
-                  </LoadScript>
+                  {googleMapsApiKey ? (
+                      <LoadScript
+                          googleMapsApiKey={googleMapsApiKey}
+                          libraries={["places"]}
+                      >
+                        <GoogleMap
+                          mapContainerStyle={containerStyle}
+                          center={mapCenter}
+                          zoom={13}
+                          onLoad={map => mapRef.current = map}
+                        >
+                          {currentLocation && (
+                            <Marker
+                              position={currentLocation}
+                              label="You are here"
+                            />
+                          )}
+                          {transportOptions.map((option) => (
+                            <Marker
+                              key={option.id}
+                              position={option.location}
+                              label={option.type}
+                            />
+                          ))}
+                          {directions && (
+                            <DirectionsRenderer
+                              directions={directions}
+                              options={{
+                                polylineOptions: {
+                                  strokeColor: "#ff2527"
+                                }
+                              }}
+                            />
+                          )}
+                        </GoogleMap>
+                      </LoadScript>
+                  ) : (
+                      <Alert variant="destructive">
+                          <AlertTitle>Map Error</AlertTitle>
+                          <AlertDescription>
+                              Google Maps API key is missing. Please provide a valid API key to display the map.
+                          </AlertDescription>
+                      </Alert>
+                  )}
                 </CardContent>
               </Card>
             </div>
