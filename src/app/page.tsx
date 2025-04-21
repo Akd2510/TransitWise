@@ -8,6 +8,10 @@ import {getTransportOptions, TransportOption} from "@/services/transport";
 import {GoogleMap, LoadScript, Marker} from "@react-google-maps/api";
 import {useToast} from "@/hooks/use-toast";
 import {recommendTransport, RecommendTransportInput} from "@/ai/flows/recommend-transport";
+import {Weather, getWeather} from "@/services/weather";
+import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
+import {Cloud, CloudRain, CloudSnow, Sun} from "lucide-react";
+import {Separator} from "@/components/ui/separator";
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -21,17 +25,42 @@ const defaultLocation = {
   lng: 72.8777
 };
 
+const weatherIconMap: { [key: string]: React.ComponentType<{ className?: string }> } = {
+  "Sunny": Sun,
+  "Cloudy": Cloud,
+  "Rainy": CloudRain,
+  "Snowy": CloudSnow,
+};
+
 export default function Home() {
   const [destination, setDestination] = useState('');
   const [transportOptions, setTransportOptions] = useState<TransportOption[]>([]);
   const [recommendedOption, setRecommendedOption] = useState<string>('');
   const {toast} = useToast();
+  const [weather, setWeather] = useState<Weather | null>(null);
 
   const [mapCenter, setMapCenter] = useState(defaultLocation);
 
   useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        const currentWeather = await getWeather({lat: 19.0760, lng: 72.8777});
+        setWeather(currentWeather);
+      } catch (error) {
+        console.error("Failed to fetch weather:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load weather information.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchWeather();
+  }, []);
+
+  useEffect(() => {
     if (transportOptions.length > 0) {
-      // Focus map on the first transport option's location
       setMapCenter(transportOptions[0].location);
     }
   }, [transportOptions]);
@@ -52,8 +81,8 @@ export default function Home() {
       const aiInput: RecommendTransportInput = {
         destination: destination,
         userPreferences: {
-          maxFare: 100, // Example preference
-          maxEta: 60,    // Example preference
+          maxFare: 100,
+          maxEta: 60,
           weatherConsiderations: true
         }
       };
@@ -74,6 +103,8 @@ export default function Home() {
       console.error(error);
     }
   };
+
+  const WeatherIcon = weather && weatherIconMap[weather.conditions] ? weatherIconMap[weather.conditions] : Sun;
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -98,6 +129,23 @@ export default function Home() {
           </CardContent>
         </Card>
 
+        {weather && (
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>Current Weather in Mumbai</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Alert>
+                <WeatherIcon className="h-6 w-6"/>
+                <AlertTitle>{weather.conditions}</AlertTitle>
+                <AlertDescription>
+                  {weather.temperatureFarenheit}°F
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+        )}
+
         {transportOptions.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -106,10 +154,18 @@ export default function Home() {
                   <CardTitle>Transport Options</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ul>
+                  <ul className="list-none p-0">
                     {transportOptions.map((option) => (
-                      <li key={option.id} className="py-2">
-                        {option.type} - ETA: {option.eta} mins, Fare: ₹{option.fare.amount}
+                      <li key={option.id} className="py-2 border-b last:border-none">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="font-medium">{option.type}</p>
+                            <p className="text-sm text-muted-foreground">ETA: {option.eta} mins</p>
+                          </div>
+                          <div>
+                            <p className="text-sm">₹{option.fare.amount}</p>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
